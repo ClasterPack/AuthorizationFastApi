@@ -1,0 +1,62 @@
+services:
+  authorization-service:
+    container_name: authorization-service
+    build: .
+    command: uvicorn src.app.main:app_factory --host 0.0.0.0 --port 8000 --factory --reload --reload-dir /usr/src/app/src
+    env_file:
+      - .env
+    volumes:
+      - ./:/usr/src/app
+      - authorization_logs:/usr/src/app/logs
+    depends_on:
+      alembic-upgrade:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  alembic-upgrade:
+    build: .
+    container_name: alembic-upgrade
+    env_file:
+      - .env
+    volumes:
+      - ./:/usr/src/app
+    working_dir: /usr/src/app
+    entrypoint: [ "/usr/local/bin/docker-entrypoint.sh" ]
+    command: [ "alembic", "upgrade", "head" ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  alembic-revision:
+    build: .
+    container_name: alembic-revision
+    env_file:
+      - .env
+    volumes:
+      - ./:/usr/src/app
+    working_dir: /usr/src/app
+    #entrypoint: [ "alembic" ]
+
+volumes:
+  postgres_data:
+  authorization_logs:
